@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./backend/.env
+    environment:
+      - PORT=8003
+      # Allow frontend origin for CORS
+      - CORS_ORIGINS=http://localhost:3003,http://127.0.0.1:3003
+      # Supabase credentials are loaded from env_file
+
+  frontend:
+    build:
+      context: ./frontend
+      # Pass API URL for client-side calls (browser -> backend)
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8003/api
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      # Internal URL for server-side calls (frontend container -> backend container)
+      - INTERNAL_API_URL=http://backend:8003/api
+    depends_on:
+      - backend

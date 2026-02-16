@@ -1,0 +1,533 @@
+openapi: 3.0.0
+info:
+  title: Demo App API
+  version: 1.0.0
+  description: API for Task Management System
+
+paths:
+  /tasks:
+    get:
+      summary: List tasks
+      parameters:
+        - name: eventId
+          in: query
+          schema:
+            type: string
+          required: false
+      responses:
+        '200':
+          description: A list of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+  /tasks/{taskId}:
+    get:
+      summary: Get a task by ID
+      parameters:
+        - name: taskId
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+
+  /tasks/{taskId}/pick:
+    post:
+      summary: Pick a task (assign to self)
+      parameters:
+        - name: taskId
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+        '400':
+          description: Error (e.g. Forbidden)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+
+  /tasks/{taskId}/transition:
+    post:
+      summary: Transition task state
+      parameters:
+        - name: taskId
+          in: path
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nextState:
+                  $ref: '#/components/schemas/TaskState'
+              required:
+                - nextState
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+
+  /tasks/{taskId}/assign:
+    post:
+      summary: Assign or unassign a task
+      parameters:
+        - name: taskId
+          in: path
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                  nullable: true
+              required:
+                - userId
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+
+  /events:
+    get:
+      summary: List events
+      responses:
+        '200':
+          description: List of events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+
+  /events/{eventId}/members:
+    get:
+      summary: List members of an event
+      parameters:
+        - name: eventId
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: List of event members with user details
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - $ref: '#/components/schemas/EventMember'
+                    - type: object
+                      properties:
+                        user:
+                          $ref: '#/components/schemas/User'
+
+  /users:
+    get:
+      summary: List all users
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /user-types:
+    get:
+      summary: List user types
+      responses:
+        '200':
+          description: List of user types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserType'
+
+  /workflow-templates:
+    get:
+      summary: List workflow templates
+      responses:
+        '200':
+          description: List of workflow templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkflowTemplate'
+    post:
+      summary: Save a workflow template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowTemplate'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+
+  /workflow-instances:
+    get:
+      summary: List workflow instances
+      parameters:
+        - name: eventId
+          in: query
+          schema:
+            type: string
+          required: false
+      responses:
+        '200':
+          description: List of workflow instances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkflowInstance'
+
+  /workflows/instantiate:
+    post:
+      summary: Instantiate a workflow for an event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workflowId:
+                  type: string
+                eventId:
+                  type: string
+              required:
+                - workflowId
+                - eventId
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  instanceId:
+                    type: string
+              required:
+                - ok
+
+  /task-types:
+    get:
+      summary: List task types
+      responses:
+        '200':
+          description: List of task types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskType'
+
+  /eligibility-mappings:
+    get:
+      summary: List eligibility mappings
+      responses:
+        '200':
+          description: List of eligibility mappings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EligibilityMapping'
+
+components:
+  schemas:
+    ActionResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        error:
+          type: string
+      required:
+        - ok
+
+    AccessLevel:
+      type: string
+      enum: [admin, regular]
+
+    TaskState:
+      type: string
+      enum: [LOCKED, TODO, ASSIGNED, IN_PROGRESS, DONE]
+
+    UserType:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        access_level:
+          $ref: '#/components/schemas/AccessLevel'
+        permissions:
+          type: object
+          properties:
+            view:
+              type: boolean
+            take:
+              type: boolean
+            move_state:
+              type: boolean
+            assign:
+              type: boolean
+          required:
+            - view
+            - take
+            - move_state
+            - assign
+      required:
+        - id
+        - name
+        - access_level
+        - permissions
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        usertype_id:
+          type: string
+        avatar_url:
+          type: string
+      required:
+        - id
+        - name
+        - email
+        - usertype_id
+
+    TaskType:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required:
+        - id
+        - name
+
+    EligibilityMapping:
+      type: object
+      properties:
+        usertype_id:
+          type: string
+        tasktype_id:
+          type: string
+      required:
+        - usertype_id
+        - tasktype_id
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+      required:
+        - id
+        - name
+        - description
+        - created_at
+
+    EventMember:
+      type: object
+      properties:
+        user_id:
+          type: string
+        event_id:
+          type: string
+      required:
+        - user_id
+        - event_id
+
+    WorkflowTemplate:
+      type: object
+      properties:
+        workflow_id:
+          type: string
+        name:
+          type: string
+        version:
+          type: integer
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEdge'
+      required:
+        - workflow_id
+        - name
+        - version
+        - nodes
+        - edges
+
+    WorkflowNode:
+      type: object
+      properties:
+        node_id:
+          type: string
+        task_type_id:
+          type: string
+        label:
+          type: string
+        metadata:
+          type: object
+          properties:
+            description:
+              type: string
+            estimated_duration_hours:
+              type: number
+          required:
+            - description
+            - estimated_duration_hours
+      required:
+        - node_id
+        - task_type_id
+        - label
+        - metadata
+
+    WorkflowEdge:
+      type: object
+      properties:
+        from_node_id:
+          type: string
+        to_node_id:
+          type: string
+      required:
+        - from_node_id
+        - to_node_id
+
+    WorkflowInstance:
+      type: object
+      properties:
+        id:
+          type: string
+        workflow_id:
+          type: string
+        event_id:
+          type: string
+        created_at:
+          type: string
+      required:
+        - id
+        - workflow_id
+        - event_id
+        - created_at
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+        workflow_instance_id:
+          type: string
+        event_id:
+          type: string
+        node_id:
+          type: string
+        tasktype_id:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        state:
+          $ref: '#/components/schemas/TaskState'
+        assignee_id:
+          type: string
+          nullable: true
+        parent_ids:
+          type: array
+          items:
+            type: string
+        child_ids:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - workflow_instance_id
+        - event_id
+        - node_id
+        - tasktype_id
+        - label
+        - description
+        - state
+        - parent_ids
+        - child_ids
