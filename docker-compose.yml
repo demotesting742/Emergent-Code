@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build: ./backend
@@ -11,19 +9,37 @@ services:
       - PORT=8003
       # Allow frontend origin for CORS
       - CORS_ORIGINS=http://localhost:3003,http://127.0.0.1:3003
-      # Supabase credentials are loaded from env_file
+    volumes:
+      # Mount source code for hot reloading
+      - ./backend:/app/backend
+    # Override CMD with --reload for hot reloading
+    command: [ "uvicorn", "backend.server:app", "--host", "0.0.0.0", "--port", "8003", "--reload", "--reload-dir", "/app/backend" ]
 
   frontend:
     build:
       context: ./frontend
-      # Pass API URL for client-side calls (browser -> backend)
+      target: dev
       args:
         NEXT_PUBLIC_API_URL: http://localhost:8003/api
     ports:
       - "3003:3003"
     environment:
       - PORT=3003
+      - WATCHPACK_POLLING=true
+      # Backend URL for browser-side calls (pre-configured for Docker)
+      - NEXT_PUBLIC_API_URL=http://localhost:8003/api
       # Internal URL for server-side calls (frontend container -> backend container)
       - INTERNAL_API_URL=http://backend:8003/api
+      # Default to live mode so frontend hits the backend API
+      - NEXT_PUBLIC_DATA_MODE=live
+      - NEXT_PUBLIC_SUPABASE_URL=https://mrshdnfxhcqjcrxcnjzs.supabase.co
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2hkbmZ4aGNxamNyeGNuanpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMTgyMzYsImV4cCI6MjA4NjU5NDIzNn0.0HqDrZIPJTTFZtMEYyAp-tE0Z5Q4nuBDVnhW5eiapj4
+    volumes:
+      # Mount source code for hot reloading
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/app:/app/app
+      - ./frontend/components:/app/components
+      - ./frontend/styles:/app/styles
     depends_on:
       - backend

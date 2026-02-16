@@ -6,6 +6,8 @@
 import { store } from "@/src/data/store"
 import createClient from "openapi-fetch"
 import type { paths, components } from "./api-types"
+import { supabase } from "@/src/lib/supabase"
+
 
 // export types for consumers
 export type Task = components["schemas"]["Task"]
@@ -27,6 +29,20 @@ const API_BASE_URL =
     : process.env.NEXT_PUBLIC_API_URL) || "http://localhost:8003/api"
 
 const client = createClient<paths>({ baseUrl: API_BASE_URL })
+
+// Middleware to inject Supabase JWT
+client.use({
+  onRequest: async (request) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      request.headers.set("Authorization", `Bearer ${session.access_token}`)
+    }
+    return request
+  }
+})
+
+
+
 
 const delay = (ms = 100) => new Promise((r) => setTimeout(r, ms))
 
@@ -163,6 +179,48 @@ export async function assignTask(
   return { ok: true }
 }
 
+export async function createTask(
+  event_id: string,
+  task_type_id: string,
+  label: string,
+  description: string,
+  workflow_instance_id?: string
+): Promise<ActionResult & { taskId?: string }> {
+  if (DATA_MODE === "live") {
+    const { data, error } = await client.POST("/tasks", {
+      params: {
+        query: {
+          eventId: event_id,
+          taskTypeId: task_type_id,
+          workflowInstanceId: workflow_instance_id
+        }
+      },
+      body: { label, description },
+    })
+    if (error) return { ok: false, error: "Failed to create task" }
+    return { ok: true, taskId: (data as any).id }
+  }
+
+  await delay()
+  const taskId = `t_${Date.now()}`
+  const newTask: Task = {
+    id: taskId,
+    workflow_instance_id: workflow_instance_id || "",
+    event_id: event_id,
+    node_id: `manual_${Date.now()}`,
+    tasktype_id: task_type_id,
+    label,
+    description,
+    state: "TODO",
+    assignee_id: null,
+    parent_ids: [],
+    child_ids: [],
+  }
+  store.tasks.push(newTask as any)
+  return { ok: true, taskId }
+}
+
+
 // ─── Event Service ───
 
 export async function fetchEvents(): Promise<Event[]> {
@@ -179,6 +237,37 @@ export async function fetchEvents(): Promise<Event[]> {
     .map((em) => em.event_id)
   return store.events.filter((e) => memberEventIds.includes(e.id)) as Event[]
 }
+
+export async function createEvent(name: string): Promise<ActionResult & { eventId?: string }> {
+  if (DATA_MODE === "live") {
+    const { data, error } = await client.POST("/events", {
+      body: { name, description: "" },
+    })
+    if (error) return { ok: false, error: "Failed to create event" }
+    return { ok: true, eventId: (data as any).id }
+  }
+
+  await delay()
+  const eventId = `e_${Date.now()}`
+  const newEvent: Event = {
+    id: eventId,
+    name,
+    description: "",
+    created_at: new Date().toISOString(),
+  }
+  store.events.push(newEvent as any)
+  // Add as admin member in mock
+  store.eventMembers.push({
+    id: `em_${Date.now()}`,
+    event_id: eventId,
+    user_id: store.currentUserId,
+    role: "ADMIN",
+    created_at: new Date().toISOString(),
+  } as any)
+
+  return { ok: true, eventId }
+}
+
 
 export async function fetchEventMembers(eventId: string): Promise<(EventMember & { user: User })[]> {
   if (DATA_MODE === "live") {

@@ -1,12 +1,34 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { useTasks, useAuth } from "@/src/hooks/use-eventflow"
+import { useTasks, useAuth, useReferenceData } from "@/src/hooks/use-eventflow"
 import { TaskCard } from "@/src/components/task-card"
 import type { Task, TaskState } from "@/src/data/types"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
+import { Plus } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+
 
 interface KanbanViewProps {
   eventId: string | null
@@ -20,9 +42,38 @@ const columns: { state: TaskState; label: string; color: string }[] = [
 ]
 
 export function KanbanView({ eventId, onTaskSelect }: KanbanViewProps) {
-  const { assignedTasks, inProgressTasks, doneTasks, lockedTasks, transition } =
+  const { assignedTasks, inProgressTasks, doneTasks, lockedTasks, transition, create: createTask } =
     useTasks(eventId ?? undefined)
   const { isCustomer } = useAuth()
+  const { taskTypes } = useReferenceData()
+
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [formData, setFormData] = useState({
+    label: "",
+    description: "",
+    taskTypeId: "",
+  })
+
+  const handleCreateTask = async () => {
+    if (!formData.label.trim() || !formData.taskTypeId) {
+      toast.error("Please fill in all required fields")
+      return
+    }
+
+    setIsCreating(true)
+    const result = await createTask(formData.taskTypeId, formData.label, formData.description)
+    setIsCreating(false)
+
+    if (result.ok) {
+      toast.success("Task created successfully")
+      setIsDialogOpen(false)
+      setFormData({ label: "", description: "", taskTypeId: "" })
+    } else {
+      toast.error(result.error || "Failed to create task")
+    }
+  }
+
 
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<TaskState | null>(null)
@@ -170,7 +221,74 @@ export function KanbanView({ eventId, onTaskSelect }: KanbanViewProps) {
             {lockedTasks.length} locked
           </span>
         )}
+
+        {eventId && !isCustomer && (
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1.5">
+                <Plus className="h-4 w-4" />
+                New Task
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Task</DialogTitle>
+                <DialogDescription>
+                  Add a new task to this event.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="taskType">Task Type *</Label>
+                  <Select
+                    value={formData.taskTypeId}
+                    onValueChange={(val) => setFormData(f => ({ ...f, taskTypeId: val }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {taskTypes.map(tt => (
+                        <SelectItem key={tt.id} value={tt.id}>{tt.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="label">Label *</Label>
+                  <Input
+                    id="label"
+                    placeholder="Task summary"
+                    value={formData.label}
+                    onChange={(e) => setFormData(f => ({ ...f, label: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Details about the task..."
+                    value={formData.description}
+                    onChange={(e) => setFormData(f => ({ ...f, description: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateTask}
+                  disabled={isCreating || !formData.label.trim() || !formData.taskTypeId}
+                >
+                  {isCreating ? "Creating..." : "Create Task"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
+
 
       {/* Mobile: stacked, Desktop: horizontal columns */}
       <div className="flex flex-1 flex-col gap-4 overflow-auto sm:flex-row">
@@ -195,9 +313,9 @@ export function KanbanView({ eventId, onTaskSelect }: KanbanViewProps) {
                     ? "border-dashed border-primary/40"
                     : "border-border",
                 draggedTaskId &&
-                  !canReceive &&
-                  draggedTaskId !== null &&
-                  "opacity-50"
+                !canReceive &&
+                draggedTaskId !== null &&
+                "opacity-50"
               )}
             >
               {/* Column Header */}
@@ -236,8 +354,8 @@ export function KanbanView({ eventId, onTaskSelect }: KanbanViewProps) {
                           "transition-opacity duration-150",
                           draggedTaskId === task.id && "opacity-40",
                           !isCustomer &&
-                            task.state !== "DONE" &&
-                            "cursor-grab active:cursor-grabbing"
+                          task.state !== "DONE" &&
+                          "cursor-grab active:cursor-grabbing"
                         )}
                       >
                         <TaskCard

@@ -10,6 +10,35 @@ class TaskService:
     """Business logic for task operations."""
     
     @staticmethod
+    async def create_task(
+        db: AsyncSession,
+        event_id: UUID,
+        tasktype_id: UUID,
+        label: str,
+        description: str,
+        user_id: UUID,
+        workflow_instance_id: Optional[UUID] = None
+    ) -> Task:
+        """Create new task if user has access."""
+        # Check scope
+        if not await AuthorizationService.has_scope(db, user_id, event_id):
+            raise ValueError("Not authorized to create tasks for this event")
+        
+        # Create task
+        task = await TaskCRUD.create(
+            db,
+            event_id=event_id,
+            tasktype_id=tasktype_id,
+            workflow_instance_id=workflow_instance_id,
+            created_by=user_id,
+            label=label,
+            description=description,
+            state=TaskState.TODO
+        )
+        return task
+    
+    @staticmethod
+
     async def get_task(
         db: AsyncSession,
         task_id: UUID,

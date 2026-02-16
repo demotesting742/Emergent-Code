@@ -5,11 +5,14 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   useSyncExternalStore,
   type ReactNode,
 } from "react"
 import { store } from "@/src/data/store"
 import type { User, UserType } from "@/src/data/types"
+import { supabase } from "@/src/lib/supabase"
+import type { Session } from "@supabase/supabase-js"
 
 // ─── External store subscription for reactive updates ───
 let listeners: (() => void)[] = []
@@ -43,19 +46,45 @@ interface AuthState {
   userType: UserType | null
   isAdmin: boolean
   isCustomer: boolean
-  login: (userId: string) => void
-  logout: () => void
+  login: (userId: string) => Promise<void>
+  signInWithEmail: (email: string, password: string) => Promise<{ error: any }>
+  logout: () => Promise<void>
   switchUser: (userId: string) => void
   resetData: () => void
+  session: Session | null
 }
 
 const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [session, setSession] = useState<Session | null>(null)
   useStoreVersion()
 
-  const login = useCallback((userId: string) => {
+  // Initialize session and listen for changes
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession)
+      if (currentSession) {
+        setIsAuthenticated(true)
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, currentSession) => {
+        setSession(currentSession)
+        setIsAuthenticated(!!currentSession)
+        emitChange()
+      }
+    )
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const login = useCallback(async (userId: string) => {
+    // For now, keep the mock logic but this is where real auth would go
     const user = store.users.find((u) => u.id === userId)
     if (!user) return
     store.currentUserId = userId
@@ -63,7 +92,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     emitChange()
   }, [])
 
-  const logout = useCallback(() => {
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    if (!error && data.session) {
+      setSession(data.session)
+      setIsAuthenticated(true)
+      emitChange()
+    }
+    return { error }
+  }, [])
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut()
     setIsAuthenticated(false)
     emitChange()
   }, [])
@@ -96,9 +139,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin,
         isCustomer,
         login,
+        signInWithEmail,
         logout,
         switchUser,
         resetData,
+        session,
       }}
     >
       {children}

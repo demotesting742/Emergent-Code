@@ -4,14 +4,51 @@ from typing import List, Optional
 from uuid import UUID
 
 from ..core import get_db, get_current_user, CurrentUser
-from ..schemas import Task, TaskTransitionRequest, TaskAssignRequest, ActionResult
+from ..schemas import Task, TaskBase, TaskTransitionRequest, TaskAssignRequest, ActionResult
 from ..services import TaskService
 from ..models import TaskState
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
+@router.post("", response_model=Task, status_code=status.HTTP_201_CREATED)
+async def create_task(
+    task_in: TaskBase,
+    eventId: str = Query(...),
+    taskTypeId: str = Query(...),
+    workflowInstanceId: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Create a new task."""
+    try:
+        user_uuid = UUID(current_user.user_id)
+        event_uuid = UUID(eventId)
+        tasktype_uuid = UUID(taskTypeId)
+        wf_uuid = UUID(workflowInstanceId) if workflowInstanceId else None
+        
+        task = await TaskService.create_task(
+            db, 
+            event_uuid, 
+            tasktype_uuid, 
+            task_in.label, 
+            task_in.description, 
+            user_uuid,
+            wf_uuid
+        )
+        return task
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        print(f"DEBUG: Failed to create task: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create task: {str(e)}"
+        )
+
+
 @router.get("", response_model=List[Task])
+
 async def list_tasks(
     eventId: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -38,7 +75,14 @@ async def get_task(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Get task by ID."""
-    task_uuid = UUID(taskId)
+    try:
+        task_uuid = UUID(taskId)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Invalid task ID format: {taskId}"
+        )
+
     
     # TODO: Get usertype_id
     usertype_id = None
@@ -64,7 +108,11 @@ async def pick_task(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Pick (assign to self) a task."""
-    task_uuid = UUID(taskId)
+    try:
+        task_uuid = UUID(taskId)
+    except ValueError:
+        return ActionResult(ok=False, error=f"Invalid task ID format: {taskId}")
+
     
     # TODO: Get usertype_id
     usertype_id = None
@@ -87,7 +135,11 @@ async def transition_task(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Transition task to new state."""
-    task_uuid = UUID(taskId)
+    try:
+        task_uuid = UUID(taskId)
+    except ValueError:
+        return ActionResult(ok=False, error=f"Invalid task ID format: {taskId}")
+
     
     # TODO: Get usertype_id
     usertype_id = None
@@ -113,8 +165,12 @@ async def assign_task(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Assign or unassign task."""
-    task_uuid = UUID(taskId)
-    assignee_uuid = UUID(body.userId) if body.userId else None
+    try:
+        task_uuid = UUID(taskId)
+        assignee_uuid = UUID(body.userId) if body.userId else None
+    except ValueError:
+        return ActionResult(ok=False, error="Invalid task or assignee ID format")
+
     
     # TODO: Get usertype_id
     usertype_id = None

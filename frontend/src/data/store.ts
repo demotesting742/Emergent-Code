@@ -34,7 +34,7 @@ class MockStore {
 
   config: AppConfig = {
     dataMode: "mock",
-    apiBaseUrl: "https://api.eventflow.io/v1",
+    apiBaseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8003/api",
   }
 
   // Current persona (mock switcher)

@@ -2,6 +2,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from typing import Optional
+import uuid
+
 from .config import get_settings
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -23,20 +25,29 @@ class CurrentUser:
         return self.user_id is not None
 
 
+from .supabase import supabase
+
 async def verify_jwt_token(token: str) -> dict:
-    """Verify JWT token from Supabase."""
+    """Verify JWT token using Supabase API."""
     try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-        return payload
-    except JWTError as e:
+        # get_user() will throw an error if the token is invalid
+        response = supabase.auth.get_user(token)
+        if not response or not response.user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+            )
+        # Return a payload-like dict for compatibility
+        return {
+            "sub": response.user.id,
+            "email": response.user.email,
+            "role": response.user.role
+        }
+    except Exception as e:
+        print(f"DEBUG: Supabase Auth verification failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
+            detail=f"Authentication failed: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -57,18 +68,40 @@ async def get_current_user(
         )
     
     # Fetch profile from database
+    user_uuid = uuid.UUID(user_id)
+    print(f"DEBUG: Fetching profile for user_id: {user_uuid}")
     result = await db.execute(
-        select(Profile).where(Profile.id == user_id)
+        select(Profile).where(Profile.id == user_uuid)
     )
+
     profile = result.scalar_one_or_none()
     
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User profile not found",
+        print(f"DEBUG: Profile not found for {user_uuid}, Creating just-in-time...")
+        email = payload.get("email", "unknown@supabase.com")
+        profile = Profile(
+            id=user_uuid,
+            email=email,
+            display_name=email.split("@")[0]
         )
+        db.add(profile)
+        try:
+            await db.commit()
+            await db.refresh(profile)
+        except Exception as e:
+            # Handle race condition - if profile was created by another request
+            await db.rollback()
+            print(f"DEBUG: Profile creation race condition or error: {str(e)}")
+            result = await db.execute(
+                select(Profile).where(Profile.id == user_uuid)
+            )
+            profile = result.scalar_one_or_none()
+            if not profile:
+                raise e
     
     return CurrentUser(user_id=user_id, profile=profile)
+
+
 
 
 async def get_optional_user(

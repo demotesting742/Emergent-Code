@@ -11,6 +11,14 @@ WORKDIR /app
 COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
 RUN corepack enable pnpm && pnpm install --no-frozen-lockfile
 
+# Development image — used by docker-compose for hot reloading
+FROM base AS dev
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+EXPOSE 3003
+ENV PORT 3003
+CMD ["npx", "next", "dev", "-p", "3003"]
 
 # Rebuild the source code only when needed
 FROM base AS builder

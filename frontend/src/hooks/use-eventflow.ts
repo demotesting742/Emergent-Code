@@ -19,16 +19,23 @@ export function useAuth() {
 export function useEvents() {
   useStoreVersion()
 
-  const events = (() => {
-    if (store.isAdmin()) return [...store.events]
+  const { events } = (() => {
+    if (store.isAdmin()) return { events: [...store.events] }
     const memberEventIds = store.eventMembers
       .filter((em) => em.user_id === store.currentUserId)
       .map((em) => em.event_id)
-    return store.events.filter((e) => memberEventIds.includes(e.id))
+    return { events: store.events.filter((e) => memberEventIds.includes(e.id)) }
   })()
 
-  return { events }
+  const create = useCallback(async (name: string) => {
+    const result = await api.createEvent(name)
+    if (result.ok) emitChange()
+    return result
+  }, [])
+
+  return { events, create }
 }
+
 
 // ─── Tasks Hook (RBAC enforced) ───
 
@@ -78,6 +85,16 @@ export function useTasks(eventId?: string | null) {
     []
   )
 
+  const create = useCallback(
+    async (task_type_id: string, label: string, description: string, workflow_instance_id?: string) => {
+      if (!eventId) return { ok: false, error: "Event ID required" }
+      const result = await api.createTask(eventId, task_type_id, label, description, workflow_instance_id)
+      if (result.ok) emitChange()
+      return result
+    },
+    [eventId]
+  )
+
   return {
     allTasks,
     todoTasks,
@@ -88,8 +105,10 @@ export function useTasks(eventId?: string | null) {
     pick,
     transition,
     assign,
+    create,
   }
 }
+
 
 // ─── Workflow Hook ───
 

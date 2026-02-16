@@ -11,7 +11,23 @@ import {
   Users,
   CheckCircle2,
   BarChart3,
+  Plus,
 } from "lucide-react"
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import { useState } from "react"
+import { toast } from "sonner"
 
 interface EventsViewProps {
   selectedEventId: string | null
@@ -19,10 +35,31 @@ interface EventsViewProps {
 }
 
 export function EventsView({ selectedEventId, onSelectEvent }: EventsViewProps) {
-  const { events } = useEvents()
+  const { events, create: createEvent } = useEvents()
   const { instances, getProgress } = useWorkflows()
   const { isAdmin } = useAuth()
   const { eventMembers, users } = useReferenceData()
+
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [newEventName, setNewEventName] = useState("")
+  const [isCreating, setIsCreating] = useState(false)
+
+  const handleCreateEvent = async () => {
+    if (!newEventName.trim()) return
+
+    setIsCreating(true)
+    const result = await createEvent(newEventName)
+    setIsCreating(false)
+
+    if (result.ok) {
+      toast.success("Event created successfully")
+      setIsDialogOpen(false)
+      setNewEventName("")
+      if (result.eventId) onSelectEvent(result.eventId)
+    } else {
+      toast.error(result.error || "Failed to create event")
+    }
+  }
 
   return (
     <div className="flex h-full flex-col gap-4 p-4">
@@ -33,15 +70,57 @@ export function EventsView({ selectedEventId, onSelectEvent }: EventsViewProps) 
             {isAdmin ? "All events (Admin view)" : "Your scoped events"}
           </p>
         </div>
-        {selectedEventId && (
-          <button
-            onClick={() => onSelectEvent(null)}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
-          >
-            Show All
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {selectedEventId && (
+            <button
+              onClick={() => onSelectEvent(null)}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+            >
+              Show All
+            </button>
+          )}
+
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="icon" variant="outline" className="h-8 w-8 rounded-lg">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Event</DialogTitle>
+                <DialogDescription>
+                  Give your new event a name to get started.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Event Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g. Summer Festival 2024"
+                    value={newEventName}
+                    onChange={(e) => setNewEventName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleCreateEvent()}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateEvent}
+                  disabled={isCreating || !newEventName.trim()}
+                >
+                  {isCreating ? "Creating..." : "Create Event"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
 
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-3">
