@@ -7,6 +7,7 @@ import { store } from "@/src/data/store"
 import createClient from "openapi-fetch"
 import type { paths, components } from "./api-types"
 import { supabase } from "@/src/lib/supabase"
+import { emitChange } from "@/src/hooks/auth-context"
 
 
 // export types for consumers
@@ -22,7 +23,11 @@ export type TaskType = components["schemas"]["TaskType"]
 export type EligibilityMapping = components["schemas"]["EligibilityMapping"]
 export type ActionResult = components["schemas"]["ActionResult"]
 
-const DATA_MODE = process.env.NEXT_PUBLIC_DATA_MODE || "mock"
+// Helper to check mode dynamically
+export function isLiveMode() {
+  return store.config.dataMode === "live"
+}
+
 const API_BASE_URL =
   (typeof window === "undefined"
     ? process.env.INTERNAL_API_URL
@@ -46,10 +51,19 @@ client.use({
 
 const delay = (ms = 100) => new Promise((r) => setTimeout(r, ms))
 
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session?.access_token) {
+    return { Authorization: `Bearer ${session.access_token}` }
+  }
+  return {}
+}
+
+
 // ─── Task Service ───
 
 export async function fetchTasks(eventId?: string): Promise<Task[]> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/tasks", {
       params: { query: { eventId } },
     })
@@ -63,7 +77,7 @@ export async function fetchTasks(eventId?: string): Promise<Task[]> {
 }
 
 export async function fetchTask(taskId: string): Promise<Task | null> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/tasks/{taskId}", {
       params: { path: { taskId } },
     })
@@ -76,7 +90,7 @@ export async function fetchTask(taskId: string): Promise<Task | null> {
 }
 
 export async function pickTask(taskId: string): Promise<ActionResult> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.POST("/tasks/{taskId}/pick", {
       params: { path: { taskId } },
     })
@@ -92,6 +106,7 @@ export async function pickTask(taskId: string): Promise<ActionResult> {
 
   task.assignee_id = store.currentUserId
   task.state = "ASSIGNED"
+  emitChange()
   return { ok: true }
 }
 
@@ -99,7 +114,7 @@ export async function transitionTask(
   taskId: string,
   nextState: TaskState
 ): Promise<ActionResult> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.POST("/tasks/{taskId}/transition", {
       params: { path: { taskId } },
       body: { nextState },
@@ -128,6 +143,7 @@ export async function transitionTask(
     store.reevaluateChildren(taskId)
   }
 
+  emitChange()
   return { ok: true }
 }
 
@@ -146,7 +162,7 @@ export async function assignTask(
   taskId: string,
   userId: string | null
 ): Promise<ActionResult> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.POST("/tasks/{taskId}/assign", {
       params: { path: { taskId } },
       body: { userId },
@@ -176,6 +192,7 @@ export async function assignTask(
 
   task.assignee_id = userId
   if (task.state === "TODO") task.state = "ASSIGNED"
+  emitChange()
   return { ok: true }
 }
 
@@ -186,7 +203,7 @@ export async function createTask(
   description: string,
   workflow_instance_id?: string
 ): Promise<ActionResult & { taskId?: string }> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.POST("/tasks", {
       params: {
         query: {
@@ -217,6 +234,7 @@ export async function createTask(
     child_ids: [],
   }
   store.tasks.push(newTask as any)
+  emitChange()
   return { ok: true, taskId }
 }
 
@@ -224,7 +242,7 @@ export async function createTask(
 // ─── Event Service ───
 
 export async function fetchEvents(): Promise<Event[]> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/events")
     if (error) throw new Error("Failed to fetch events")
     return data!
@@ -239,9 +257,9 @@ export async function fetchEvents(): Promise<Event[]> {
 }
 
 export async function createEvent(name: string): Promise<ActionResult & { eventId?: string }> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.POST("/events", {
-      body: { name, description: "" },
+      body: { name },
     })
     if (error) return { ok: false, error: "Failed to create event" }
     return { ok: true, eventId: (data as any).id }
@@ -265,12 +283,52 @@ export async function createEvent(name: string): Promise<ActionResult & { eventI
     created_at: new Date().toISOString(),
   } as any)
 
+  emitChange()
   return { ok: true, eventId }
 }
 
+export async function updateEvent(eventId: string, name: string): Promise<ActionResult> {
+  if (isLiveMode()) {
+    const res = await fetch(`${API_BASE_URL}/events/${eventId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(await getAuthHeader()),
+      },
+      body: JSON.stringify({ name }),
+    })
+    if (!res.ok) return { ok: false, error: "Failed to update event" }
+    return { ok: true }
+  }
+
+  await delay()
+  const event = store.events.find((e) => e.id === eventId)
+  if (!event) return { ok: false, error: "Event not found" }
+  event.name = name
+  return { ok: true }
+}
+
+export async function deleteEvent(eventId: string): Promise<ActionResult> {
+  if (isLiveMode()) {
+    const res = await fetch(`${API_BASE_URL}/events/${eventId}`, {
+      method: "DELETE",
+      headers: await getAuthHeader(),
+    })
+    if (!res.ok) return { ok: false, error: "Failed to delete event" }
+    return { ok: true }
+  }
+
+  await delay()
+  const idx = store.events.findIndex((e) => e.id === eventId)
+  if (idx < 0) return { ok: false, error: "Event not found" }
+  store.events.splice(idx, 1)
+  return { ok: true }
+}
+
+
 
 export async function fetchEventMembers(eventId: string): Promise<(EventMember & { user: User })[]> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/events/{eventId}/members", {
       params: { path: { eventId } },
     })
@@ -292,7 +350,7 @@ export async function fetchEventMembers(eventId: string): Promise<(EventMember &
 // ─── User Service ───
 
 export async function fetchUsers(): Promise<User[]> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/users")
     if (error) throw new Error("Failed to fetch users")
     return data!
@@ -303,7 +361,7 @@ export async function fetchUsers(): Promise<User[]> {
 }
 
 export async function fetchUserTypes(): Promise<UserType[]> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/user-types")
     if (error) throw new Error("Failed to fetch user types")
     return data!
@@ -316,7 +374,7 @@ export async function fetchUserTypes(): Promise<UserType[]> {
 // ─── Workflow Service ───
 
 export async function fetchWorkflowTemplates(): Promise<WorkflowTemplate[]> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/workflow-templates")
     if (error) throw new Error("Failed to fetch workflow templates")
     return data!
@@ -327,7 +385,7 @@ export async function fetchWorkflowTemplates(): Promise<WorkflowTemplate[]> {
 }
 
 export async function fetchWorkflowInstances(eventId?: string): Promise<WorkflowInstance[]> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/workflow-instances", {
       params: { query: { eventId } },
     })
@@ -343,7 +401,7 @@ export async function fetchWorkflowInstances(eventId?: string): Promise<Workflow
 export async function saveWorkflowTemplate(
   template: WorkflowTemplate
 ): Promise<ActionResult> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.POST("/workflow-templates", {
       body: template,
     })
@@ -374,16 +432,19 @@ export async function saveWorkflowTemplate(
   } else {
     store.workflowTemplates.push(template as any)
   }
+  emitChange()
   return { ok: true }
 }
 
 export async function instantiateWorkflow(
   workflowId: string,
-  eventId: string
+  eventId: string,
+  nodes?: any[],
+  edges?: any[]
 ): Promise<{ ok: boolean; error?: string; instanceId?: string }> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.POST("/workflows/instantiate", {
-      body: { workflowId, eventId },
+      body: { workflowId, eventId, nodes: nodes || [], edges: edges || [] },
     })
     if (error) return { ok: false, error: "Failed to instantiate workflow" }
     return data as any
@@ -442,13 +503,14 @@ export async function instantiateWorkflow(
     store.tasks.push(task as any)
   }
 
+  emitChange()
   return { ok: true, instanceId }
 }
 
 // ─── TaskType & Eligibility Service ───
 
 export async function fetchTaskTypes(): Promise<TaskType[]> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/task-types")
     if (error) throw new Error("Failed to fetch task types")
     return data!
@@ -459,14 +521,24 @@ export async function fetchTaskTypes(): Promise<TaskType[]> {
 }
 
 export async function fetchEligibilityMappings(): Promise<EligibilityMapping[]> {
-  if (DATA_MODE === "live") {
+  if (isLiveMode()) {
     const { data, error } = await client.GET("/eligibility-mappings")
     if (error) throw new Error("Failed to fetch eligibility mappings")
     return data!
   }
+  return [...store.eligibilityMappings]
+}
 
-  await delay()
-  return [...store.eligibilityMappings] as EligibilityMapping[]
+export async function checkBackendHealth(): Promise<boolean> {
+  if (isLiveMode()) {
+    try {
+      const { data } = await client.GET("/health")
+      return !!data
+    } catch {
+      return false
+    }
+  }
+  return true
 }
 
 // ─── DAG Cycle Detection ───

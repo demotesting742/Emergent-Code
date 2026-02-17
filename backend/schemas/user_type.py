@@ -1,25 +1,24 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Dict
-from ..schemas.common import AccessLevel
+from typing import Optional
+from datetime import datetime
+from .common import StrUUID
 
 
 class PermissionsSchema(BaseModel):
-    """Permissions schema."""
-    view: bool
-    take: bool
-    move_state: bool
-    assign: bool
+    """Permissions schema (for future use)."""
+    view: bool = True
+    take: bool = False
+    move_state: bool = False
+    assign: bool = False
 
 
 class UserTypeBase(BaseModel):
     """Base user type schema."""
     name: str
-    access_level: AccessLevel
-    permissions: PermissionsSchema
 
 
 class UserType(UserTypeBase):
     """User type response schema."""
-    id: str
+    id: StrUUID
     
     model_config = ConfigDict(from_attributes=True)

@@ -17,20 +17,26 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text UNIQUE NOT NULL,
   display_name text,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS public.user_types (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text UNIQUE NOT NULL,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS public.events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   created_by uuid REFERENCES public.profiles(id),
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS public.event_members (
@@ -39,6 +45,8 @@ CREATE TABLE IF NOT EXISTS public.event_members (
   profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   role text,
   created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
   UNIQUE (event_id, profile_id)
 );
 
@@ -61,7 +69,9 @@ CREATE TABLE IF NOT EXISTS public.workflow_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   created_by uuid REFERENCES public.profiles(id),
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS public.workflow_instances (
@@ -69,7 +79,9 @@ CREATE TABLE IF NOT EXISTS public.workflow_instances (
   workflow_template_id uuid REFERENCES public.workflow_templates(id) ON DELETE CASCADE,
   event_id uuid REFERENCES public.events(id) ON DELETE CASCADE,
   created_by uuid REFERENCES public.profiles(id),
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS public.tasks (
@@ -81,6 +93,8 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   assignee_profile_id uuid REFERENCES public.profiles(id),
   state task_state DEFAULT 'TODO',
   created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
   updated_at timestamptz DEFAULT now(),
   deleted_at timestamptz
 );
@@ -90,6 +104,8 @@ CREATE TABLE IF NOT EXISTS public.task_dependencies (
   task_id uuid NOT NULL REFERENCES public.tasks(id) ON DELETE CASCADE,
   depends_on_task_id uuid NOT NULL REFERENCES public.tasks(id) ON DELETE CASCADE,
   created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
   UNIQUE (task_id, depends_on_task_id)
 );
 
@@ -114,21 +130,27 @@ CREATE TABLE IF NOT EXISTS public.task_assignments_audit (
 CREATE TABLE IF NOT EXISTS public.indexes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS public.schema_audit_issues (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   object_name text NOT NULL,
   issue text NOT NULL,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS public.openapi_db_mapping (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   openapi_path text NOT NULL,
   db_table text NOT NULL,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  nodes_json jsonb DEFAULT '[]',
+  edges_json jsonb DEFAULT '[]'
 );
 
 -- 1.3 Indexes (examples)

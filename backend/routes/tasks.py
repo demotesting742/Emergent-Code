@@ -5,6 +5,7 @@ from uuid import UUID
 
 from ..core import get_db, get_current_user, CurrentUser
 from ..schemas import Task, TaskBase, TaskTransitionRequest, TaskAssignRequest, ActionResult
+from ..schemas.common import safe_uuid
 from ..services import TaskService
 from ..models import TaskState
 
@@ -22,10 +23,19 @@ async def create_task(
 ):
     """Create a new task."""
     try:
-        user_uuid = UUID(current_user.user_id)
-        event_uuid = UUID(eventId)
-        tasktype_uuid = UUID(taskTypeId)
-        wf_uuid = UUID(workflowInstanceId) if workflowInstanceId else None
+        user_uuid = safe_uuid(current_user.user_id)
+        event_uuid = safe_uuid(eventId)
+        tasktype_uuid = safe_uuid(taskTypeId)
+        wf_uuid = safe_uuid(workflowInstanceId) if workflowInstanceId else None
+        
+        if not user_uuid:
+            raise HTTPException(status_code=400, detail=f"Invalid user ID: {current_user.user_id}")
+        if not event_uuid:
+            raise HTTPException(status_code=400, detail=f"Invalid event ID: {eventId}")
+        if not tasktype_uuid:
+            raise HTTPException(status_code=400, detail=f"Invalid task type ID: {taskTypeId}")
+        if workflowInstanceId and not wf_uuid:
+            raise HTTPException(status_code=400, detail=f"Invalid workflow instance ID: {workflowInstanceId}")
         
         task = await TaskService.create_task(
             db, 
@@ -48,24 +58,28 @@ async def create_task(
 
 
 @router.get("", response_model=List[Task])
-
 async def list_tasks(
     eventId: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """List tasks (filtered by event if provided)."""
-    event_uuid = UUID(eventId) if eventId else None
+    event_uuid = safe_uuid(eventId) if eventId else None
+    if eventId and not event_uuid:
+        raise HTTPException(status_code=400, detail=f"Invalid event ID: {eventId}")
+    
+    user_uuid = safe_uuid(current_user.user_id)
+    if not user_uuid:
+        raise HTTPException(status_code=400, detail=f"Invalid user ID: {current_user.user_id}")
     
     # TODO: Get usertype_id from profile
     usertype_id = None
     
     tasks = await TaskService.list_tasks(
-        db, current_user.user_id, usertype_id, event_uuid
+        db, user_uuid, usertype_id, event_uuid
     )
     
-    # TODO: Transform to response schema with parent_ids/child_ids
-    return []
+    return tasks
 
 
 @router.get("/{taskId}", response_model=Task)
@@ -75,20 +89,21 @@ async def get_task(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Get task by ID."""
-    try:
-        task_uuid = UUID(taskId)
-    except ValueError:
+    task_uuid = safe_uuid(taskId)
+    if not task_uuid:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Invalid task ID format: {taskId}"
         )
 
-    
+    user_uuid = safe_uuid(current_user.user_id)
+    if not user_uuid:
+        raise HTTPException(status_code=400, detail=f"Invalid user ID: {current_user.user_id}")
     # TODO: Get usertype_id
     usertype_id = None
     
     task = await TaskService.get_task(
-        db, task_uuid, current_user.user_id, usertype_id
+        db, task_uuid, user_uuid, usertype_id
     )
     
     if not task:
@@ -97,7 +112,6 @@ async def get_task(
             detail="Task not found"
         )
     
-    # TODO: Transform to response schema
     return task
 
 
@@ -108,17 +122,18 @@ async def pick_task(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Pick (assign to self) a task."""
-    try:
-        task_uuid = UUID(taskId)
-    except ValueError:
+    task_uuid = safe_uuid(taskId)
+    if not task_uuid:
         return ActionResult(ok=False, error=f"Invalid task ID format: {taskId}")
 
-    
+    user_uuid = safe_uuid(current_user.user_id)
+    if not user_uuid:
+        return ActionResult(ok=False, error=f"Invalid user ID: {current_user.user_id}")
     # TODO: Get usertype_id
     usertype_id = None
     
     success, error = await TaskService.pick_task(
-        db, task_uuid, current_user.user_id, usertype_id
+        db, task_uuid, user_uuid, usertype_id
     )
     
     if not success:
@@ -135,12 +150,13 @@ async def transition_task(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Transition task to new state."""
-    try:
-        task_uuid = UUID(taskId)
-    except ValueError:
+    task_uuid = safe_uuid(taskId)
+    if not task_uuid:
         return ActionResult(ok=False, error=f"Invalid task ID format: {taskId}")
 
-    
+    user_uuid = safe_uuid(current_user.user_id)
+    if not user_uuid:
+        return ActionResult(ok=False, error=f"Invalid user ID: {current_user.user_id}")
     # TODO: Get usertype_id
     usertype_id = None
     
@@ -148,7 +164,7 @@ async def transition_task(
     next_state = TaskState[body.nextState.value]
     
     success, error = await TaskService.transition_task(
-        db, task_uuid, next_state, current_user.user_id, usertype_id
+        db, task_uuid, next_state, user_uuid, usertype_id
     )
     
     if not success:
@@ -165,18 +181,22 @@ async def assign_task(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Assign or unassign task."""
-    try:
-        task_uuid = UUID(taskId)
-        assignee_uuid = UUID(body.userId) if body.userId else None
-    except ValueError:
-        return ActionResult(ok=False, error="Invalid task or assignee ID format")
-
+    task_uuid = safe_uuid(taskId)
+    assignee_uuid = safe_uuid(body.userId) if body.userId else None
     
+    if not task_uuid:
+        return ActionResult(ok=False, error="Invalid task ID format")
+    if body.userId and not assignee_uuid:
+        return ActionResult(ok=False, error="Invalid assignee ID format")
+
+    user_uuid = safe_uuid(current_user.user_id)
+    if not user_uuid:
+        return ActionResult(ok=False, error=f"Invalid user ID: {current_user.user_id}")
     # TODO: Get usertype_id
     usertype_id = None
     
     success, error = await TaskService.assign_task(
-        db, task_uuid, assignee_uuid, current_user.user_id, usertype_id
+        db, task_uuid, assignee_uuid, user_uuid, usertype_id
     )
     
     if not success:
