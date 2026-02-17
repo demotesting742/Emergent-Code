@@ -16,6 +16,4 @@ async def list_users(
 ):
     """List all users."""
     users = await UserCRUD.get_all(db)
-    
-    # TODO: Transform to response schema
-    return []
+    return users

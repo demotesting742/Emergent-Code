@@ -32,13 +32,17 @@ class MockStore {
   workflowInstances: WorkflowInstance[] = clone(seed.workflowInstances)
   tasks: Task[] = clone(seed.tasks)
 
+  constructor() {
+    console.log("MockStore: Initialized with templates count:", this.workflowTemplates.length)
+  }
+
   config: AppConfig = {
     dataMode: "mock",
     apiBaseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8003/api",
   }
 
   // Current persona (mock switcher)
-  currentUserId: string = "u_admin"
+  currentUserId: string = "52c2ee46-a70b-5e87-80b0-5089d1718640"
 
   reset() {
     this.users = clone(seed.users)
@@ -50,7 +54,7 @@ class MockStore {
     this.workflowTemplates = clone(seed.workflowTemplates)
     this.workflowInstances = clone(seed.workflowInstances)
     this.tasks = clone(seed.tasks)
-    this.currentUserId = "u_admin"
+    this.currentUserId = "52c2ee46-a70b-5e87-80b0-5089d1718640"
   }
 
   // ─── Helpers ───

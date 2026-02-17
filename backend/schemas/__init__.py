@@ -1,4 +1,4 @@
-from .common import ActionResult, AccessLevel, TaskStateEnum
+from .common import ActionResult, AccessLevel, TaskStateEnum, StrUUID
 from .user import User, UserBase
 from .user_type import UserType, UserTypeBase, PermissionsSchema
 from .event import Event, EventBase, EventMember, EventMemberBase
@@ -7,6 +7,7 @@ from .task import Task, TaskBase, TaskTransitionRequest, TaskAssignRequest
 from .workflow import (
     WorkflowTemplate,
     WorkflowTemplateBase,
+    WorkflowTemplateInput,
     WorkflowInstance,
     WorkflowNode,
     WorkflowEdge,
@@ -19,6 +20,7 @@ __all__ = [
     "ActionResult",
     "AccessLevel",
     "TaskStateEnum",
+    "StrUUID",
     "User",
     "UserBase",
     "UserType",
@@ -38,6 +40,7 @@ __all__ = [
     "TaskAssignRequest",
     "WorkflowTemplate",
     "WorkflowTemplateBase",
+    "WorkflowTemplateInput",
     "WorkflowInstance",
     "WorkflowNode",
     "WorkflowEdge",

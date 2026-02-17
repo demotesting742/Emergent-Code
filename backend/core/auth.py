@@ -1,6 +1,5 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
 from typing import Optional
 import uuid
 
@@ -28,21 +27,26 @@ class CurrentUser:
 from .supabase import supabase
 
 async def verify_jwt_token(token: str) -> dict:
-    """Verify JWT token using Supabase API."""
+    """Verify JWT token using Supabase Admin API (service_role key).
+    
+    Uses supabase.auth.get_user() which validates the token server-side
+    with full admin privileges (service_role key). This properly handles
+    ES256 signed JWTs without needing the public key locally.
+    """
     try:
-        # get_user() will throw an error if the token is invalid
         response = supabase.auth.get_user(token)
         if not response or not response.user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication credentials",
             )
-        # Return a payload-like dict for compatibility
         return {
             "sub": response.user.id,
             "email": response.user.email,
             "role": response.user.role
         }
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"DEBUG: Supabase Auth verification failed: {str(e)}")
         raise HTTPException(
@@ -69,7 +73,6 @@ async def get_current_user(
     
     # Fetch profile from database
     user_uuid = uuid.UUID(user_id)
-    print(f"DEBUG: Fetching profile for user_id: {user_uuid}")
     result = await db.execute(
         select(Profile).where(Profile.id == user_uuid)
     )
@@ -89,7 +92,6 @@ async def get_current_user(
             await db.commit()
             await db.refresh(profile)
         except Exception as e:
-            # Handle race condition - if profile was created by another request
             await db.rollback()
             print(f"DEBUG: Profile creation race condition or error: {str(e)}")
             result = await db.execute(
@@ -100,8 +102,6 @@ async def get_current_user(
                 raise e
     
     return CurrentUser(user_id=user_id, profile=profile)
-
-
 
 
 async def get_optional_user(

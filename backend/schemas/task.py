@@ -1,28 +1,26 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
-from ..schemas.common import TaskStateEnum
+from .common import TaskStateEnum, StrUUID
 
 
 class TaskBase(BaseModel):
-    """Base task schema."""
-    label: str
-    description: str
+    """Base task schema for creation."""
+    label: str = ""
+    description: str = ""
 
 
 class Task(BaseModel):
-    """Task response schema."""
-    id: str
-    workflow_instance_id: str
-    event_id: str
-    node_id: str
-    tasktype_id: str
-    label: str
-    description: str
-    state: TaskStateEnum
-    assignee_id: Optional[str] = None
-    parent_ids: List[str]
-    child_ids: List[str]
+    """Task response schema — aligned with ORM Task model."""
+    id: StrUUID
+    workflow_instance_id: Optional[StrUUID] = None
+    event_id: Optional[StrUUID] = None
+    tasktype_id: Optional[StrUUID] = None
+    created_by: Optional[StrUUID] = None
+    assignee_profile_id: Optional[StrUUID] = None
+    state: Optional[TaskStateEnum] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
 

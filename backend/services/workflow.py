@@ -4,6 +4,7 @@ from uuid import UUID
 from ..crud import WorkflowCRUD, TaskCRUD, TaskTypeCRUD
 from ..models import WorkflowTemplate, WorkflowInstance, Task, TaskState
 from ..schemas.workflow import WorkflowNode, WorkflowEdge
+from ..schemas.common import safe_uuid
 
 
 class WorkflowService:
@@ -24,7 +25,10 @@ class WorkflowService:
         
         # Check all task_type_ids exist
         for node in nodes:
-            task_type = await TaskTypeCRUD.get_by_id(db, UUID(node.task_type_id))
+            tt_uuid = safe_uuid(node.task_type_id)
+            if not tt_uuid:
+                return False, f"Invalid task type ID format: {node.task_type_id}"
+            task_type = await TaskTypeCRUD.get_by_id(db, tt_uuid)
             if not task_type:
                 return False, f"TaskType {node.task_type_id} not found"
         
@@ -99,11 +103,16 @@ class WorkflowService:
             # Determine initial state
             initial_state = TaskState.TODO if not parent_map[node.node_id] else TaskState.BLOCKED
             
+            tt_uuid = safe_uuid(node.task_type_id)
+            if not tt_uuid:
+                # This should have been caught by validation, but let's be safe
+                continue
+
             task = await TaskCRUD.create(
                 db,
                 workflow_instance_id=instance.id,
                 event_id=event_id,
-                tasktype_id=UUID(node.task_type_id),
+                tasktype_id=tt_uuid,
                 created_by=created_by,
                 state=initial_state,
             )

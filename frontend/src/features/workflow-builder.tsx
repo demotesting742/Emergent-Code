@@ -7,6 +7,7 @@ import {
   useReferenceData,
   useEvents,
 } from "@/src/hooks/use-eventflow"
+import { store } from "@/src/data/store"
 import type { WorkflowTemplate, WorkflowNode, WorkflowEdge } from "@/src/data/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -234,9 +235,14 @@ export function WorkflowBuilder() {
   const { taskTypes } = useReferenceData()
   const { events } = useEvents()
 
-  const [selectedTemplate, setSelectedTemplate] = useState<WorkflowTemplate | null>(
-    templates[0] ?? null
-  )
+  const [selectedTemplate, setSelectedTemplate] = useState<WorkflowTemplate | null>(null)
+
+  useEffect(() => {
+    if (!selectedTemplate && templates.length > 0) {
+      setSelectedTemplate(templates[0])
+    }
+  }, [templates, selectedTemplate])
+
   const [editingTemplate, setEditingTemplate] = useState<WorkflowTemplate | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [showInstantiateDialog, setShowInstantiateDialog] = useState(false)
@@ -269,7 +275,12 @@ export function WorkflowBuilder() {
 
   const handleInstantiate = async () => {
     if (!selectedTemplate || !instantiateEventId) return
-    const result = await instantiate(selectedTemplate.workflow_id, instantiateEventId)
+    const result = await instantiate(
+      selectedTemplate.workflow_id,
+      instantiateEventId,
+      selectedTemplate.nodes,
+      selectedTemplate.edges
+    )
     if (result.ok) {
       toast.success("Workflow instantiated")
       setShowInstantiateDialog(false)
@@ -392,10 +403,6 @@ export function WorkflowBuilder() {
               {/* Action bar */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium text-foreground">
-                  {activeTemplate.name}
-                  {editingTemplate && (
-                    <span className="ml-2 text-xs text-warning">(editing)</span>
-                  )}
                 </span>
                 <div className="ml-auto flex gap-2">
                   {isAdmin && !editingTemplate && (
